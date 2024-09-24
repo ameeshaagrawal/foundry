@@ -245,6 +245,7 @@ interface Vm {
     function expectSafeMemoryCall(uint64 min, uint64 max) external;
     function fee(uint256 newBasefee) external;
     function ffi(string[] calldata commandInput) external returns (bytes memory result);
+    function ffiNew(string[] calldata commandInput) external returns (bytes memory result);
     function fsMetadata(string calldata path) external view returns (FsMetadata memory metadata);
     function getBlobBaseFee() external view returns (uint256 blobBaseFee);
     function getBlobhashes() external view returns (bytes32[] memory hashes);

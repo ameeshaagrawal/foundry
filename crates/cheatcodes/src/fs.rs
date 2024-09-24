@@ -462,6 +462,21 @@ impl Cheatcode for ffiCall {
     }
 }
 
+impl Cheatcode for ffiNewCall {
+    fn apply(&self, state: &mut Cheatcodes) -> Result {
+        let Self { commandInput: input } = self;
+
+        let output = ffi(state, input)?;
+        // TODO: check exit code?
+        if !output.stderr.is_empty() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            error!(target: "cheatcodes", ?input, ?stderr, "non-empty stderr");
+        }
+        // we already hex-decoded the stdout in `ffi`
+        Ok(output.stdout.abi_encode())
+    }
+}
+
 impl Cheatcode for tryFfiCall {
     fn apply(&self, state: &mut Cheatcodes) -> Result {
         let Self { commandInput: input } = self;
@@ -619,6 +634,34 @@ fn prompt(
     }
 }
 
+fn ffiNew(state: &Cheatcodes, input: &[String]) -> Result<FfiResult> {
+    ensure!(!input.is_empty() && !input[0].is_empty(), "can't execute empty command");
+    let mut cmd = Command::new(&input[0]);
+    cmd.args(&input[1..]);
+
+    debug!(target: "cheatcodes", ?cmd, "invoking ffi");
+
+    let output = cmd
+        .current_dir(&state.config.root)
+        .output()
+        .map_err(|err| fmt_err!("failed to execute command {cmd:?}: {err}"))?;
+
+    // The stdout might be encoded on valid hex, or it might just be a string,
+    // so we need to determine which it is to avoid improperly encoding later.
+    let trimmed_stdout = String::from_utf8(output.stdout)?;
+    let trimmed_stdout = trimmed_stdout.trim();
+    let encoded_stdout = if let Ok(hex) = hex::decode(trimmed_stdout) {
+        hex
+    } else {
+        trimmed_stdout.as_bytes().to_vec()
+    };
+    Ok(FfiResult {
+        exitCode: output.status.code().unwrap_or(69),
+        stdout: encoded_stdout.into(),
+        stderr: output.stderr.into(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -634,7 +677,24 @@ mod tests {
         Cheatcodes::new(Arc::new(config))
     }
 
+    fn cheatsNew() -> Cheatcodes {
+        let config = CheatsConfig {
+            ffi: false,
+            root: PathBuf::from(&env!("CARGO_MANIFEST_DIR")),
+            ..Default::default()
+        };
+        Cheatcodes::new(Arc::new(config))
+    }
+
     #[test]
+    fn test_ffiNew_hex() {
+        let msg = b"gm";
+        let cheats = cheats();
+        let args = ["echo".to_string(), hex::encode(msg)];
+        let output = ffiNew(&cheatsNew, &args).unwrap();
+        assert_eq!(output.stdout, Bytes::from(msg));
+    }
+
     fn test_ffi_hex() {
         let msg = b"gm";
         let cheats = cheats();
