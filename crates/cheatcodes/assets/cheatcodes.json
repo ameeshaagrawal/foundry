@@ -4993,6 +4993,26 @@
     },
     {
       "func": {
+        "id": "ffiNew",
+        "description": "Performs a foreign function call via the terminal.",
+        "declaration": "function ffiNew(string[] calldata commandInput) external returns (bytes memory result);",
+        "visibility": "external",
+        "mutability": "",
+        "signature": "ffiNew(string[])",
+        "selector": "0x204f04d9",
+        "selectorBytes": [
+          32,
+          79,
+          4,
+          217
+        ]
+      },
+      "group": "evm",
+      "status": "stable",
+      "safety": "safe"
+    },
+    {
+      "func": {
         "id": "fsMetadata",
         "description": "Given a path, query the file system to get information about a file, directory, etc.",
         "declaration": "function fsMetadata(string calldata path) external view returns (FsMetadata memory metadata);",

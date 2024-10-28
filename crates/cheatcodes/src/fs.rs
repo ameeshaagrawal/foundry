@@ -1,12 +1,12 @@
 //! Implementations of [`Filesystem`](spec::Group::Filesystem) cheatcodes.
 
 use super::string::parse;
-use crate::{Cheatcode, Cheatcodes, CheatcodesExecutor, CheatsCtxt, Result, Vm::*};
+use crate::{ Cheatcode, Cheatcodes, CheatcodesExecutor, CheatsCtxt, Result, Vm::* };
 use alloy_dyn_abi::DynSolType;
 use alloy_json_abi::ContractObject;
-use alloy_primitives::{hex, Bytes, U256};
+use alloy_primitives::{ hex, Bytes, U256 };
 use alloy_sol_types::SolValue;
-use dialoguer::{Input, Password};
+use dialoguer::{ Input, Password };
 use foundry_common::fs;
 use foundry_config::fs_permissions::FsAccessKind;
 use foundry_evm_core::backend::DatabaseExt;
@@ -14,12 +14,12 @@ use revm::interpreter::CreateInputs;
 use semver::Version;
 use std::{
     collections::hash_map::Entry,
-    io::{BufRead, BufReader, Write},
-    path::{Path, PathBuf},
+    io::{ BufRead, BufReader, Write },
+    path::{ Path, PathBuf },
     process::Command,
     sync::mpsc,
     thread,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{ SystemTime, UNIX_EPOCH },
 };
 use walkdir::WalkDir;
 
@@ -39,21 +39,25 @@ impl Cheatcode for fsMetadataCall {
         let metadata = path.metadata()?;
 
         // These fields not available on all platforms; default to 0
-        let [modified, accessed, created] =
-            [metadata.modified(), metadata.accessed(), metadata.created()].map(|time| {
-                time.unwrap_or(UNIX_EPOCH).duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
-            });
+        let [modified, accessed, created] = [
+            metadata.modified(),
+            metadata.accessed(),
+            metadata.created(),
+        ].map(|time| {
+            time.unwrap_or(UNIX_EPOCH).duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
+        });
 
-        Ok(FsMetadata {
-            isDir: metadata.is_dir(),
-            isSymlink: metadata.is_symlink(),
-            length: U256::from(metadata.len()),
-            readOnly: metadata.permissions().readonly(),
-            modified: U256::from(modified),
-            accessed: U256::from(accessed),
-            created: U256::from(created),
-        }
-        .abi_encode())
+        Ok(
+            (FsMetadata {
+                isDir: metadata.is_dir(),
+                isSymlink: metadata.is_symlink(),
+                length: U256::from(metadata.len()),
+                readOnly: metadata.permissions().readonly(),
+                modified: U256::from(modified),
+                accessed: U256::from(accessed),
+                created: U256::from(created),
+            }).abi_encode()
+        )
     }
 }
 
@@ -117,7 +121,7 @@ impl Cheatcode for createDirCall {
     fn apply(&self, state: &mut Cheatcodes) -> Result {
         let Self { path, recursive } = self;
         let path = state.config.ensure_path_allowed(path, FsAccessKind::Write)?;
-        if *recursive { fs::create_dir_all(path) } else { fs::create_dir(path) }?;
+        (if *recursive { fs::create_dir_all(path) } else { fs::create_dir(path) })?;
         Ok(Default::default())
     }
 }
@@ -198,7 +202,7 @@ impl Cheatcode for removeDirCall {
     fn apply(&self, state: &mut Cheatcodes) -> Result {
         let Self { path, recursive } = self;
         let path = state.config.ensure_path_allowed(path, FsAccessKind::Write)?;
-        if *recursive { fs::remove_dir_all(path) } else { fs::remove_dir(path) }?;
+        (if *recursive { fs::remove_dir_all(path) } else { fs::remove_dir(path) })?;
         Ok(Default::default())
     }
 }
@@ -268,7 +272,7 @@ impl Cheatcode for deployCode_0Call {
     fn apply_full<DB: DatabaseExt, E: CheatcodesExecutor>(
         &self,
         ccx: &mut CheatsCtxt<DB>,
-        executor: &mut E,
+        executor: &mut E
     ) -> Result {
         let Self { artifactPath: path } = self;
         let bytecode = get_artifact_code(ccx.state, path, false)?;
@@ -281,10 +285,9 @@ impl Cheatcode for deployCode_0Call {
                     init_code: bytecode,
                     gas_limit: ccx.gas_limit,
                 },
-                ccx,
+                ccx
             )?
-            .address
-            .ok_or_else(|| fmt_err!("contract creation failed"))?;
+            .address.ok_or_else(|| fmt_err!("contract creation failed"))?;
 
         Ok(address.abi_encode())
     }
@@ -294,7 +297,7 @@ impl Cheatcode for deployCode_1Call {
     fn apply_full<DB: DatabaseExt, E: CheatcodesExecutor>(
         &self,
         ccx: &mut CheatsCtxt<DB>,
-        executor: &mut E,
+        executor: &mut E
     ) -> Result {
         let Self { artifactPath: path, constructorArgs } = self;
         let mut bytecode = get_artifact_code(ccx.state, path, false)?.to_vec();
@@ -308,10 +311,9 @@ impl Cheatcode for deployCode_1Call {
                     init_code: bytecode.into(),
                     gas_limit: ccx.gas_limit,
                 },
-                ccx,
+                ccx
             )?
-            .address
-            .ok_or_else(|| fmt_err!("contract creation failed"))?;
+            .address.ok_or_else(|| fmt_err!("contract creation failed"))?;
 
         Ok(address.abi_encode())
     }
@@ -378,7 +380,8 @@ fn get_artifact_code(state: &Cheatcodes, path: &str, deployed: bool) -> Result<B
                         }
                     }
                     if let Some(ref version) = version {
-                        if id.version.minor != version.minor ||
+                        if
+                            id.version.minor != version.minor ||
                             id.version.major != version.major ||
                             id.version.patch != version.patch
                         {
@@ -389,14 +392,12 @@ fn get_artifact_code(state: &Cheatcodes, path: &str, deployed: bool) -> Result<B
                 })
                 .collect::<Vec<_>>();
 
-            let artifact = match &filtered[..] {
+            let artifact = (match &filtered[..] {
                 [] => Err(fmt_err!("no matching artifact found")),
                 [artifact] => Ok(artifact),
                 filtered => {
                     // If we know the current script/test contract solc version, try to filter by it
-                    state
-                        .config
-                        .running_version
+                    state.config.running_version
                         .as_ref()
                         .and_then(|version| {
                             let filtered = filtered
@@ -407,7 +408,7 @@ fn get_artifact_code(state: &Cheatcodes, path: &str, deployed: bool) -> Result<B
                         })
                         .ok_or_else(|| fmt_err!("multiple matching artifacts found"))
                 }
-            }?;
+            })?;
 
             let maybe_bytecode = if deployed {
                 artifact.1.deployed_bytecode().cloned()
@@ -415,23 +416,25 @@ fn get_artifact_code(state: &Cheatcodes, path: &str, deployed: bool) -> Result<B
                 artifact.1.bytecode().cloned()
             };
 
-            return maybe_bytecode
-                .ok_or_else(|| fmt_err!("no bytecode for contract; is it abstract or unlinked?"));
+            return maybe_bytecode.ok_or_else(||
+                fmt_err!("no bytecode for contract; is it abstract or unlinked?")
+            );
         } else {
-            let path_in_artifacts =
-                match (file.map(|f| f.to_string_lossy().to_string()), contract_name) {
-                    (Some(file), Some(contract_name)) => {
-                        PathBuf::from(format!("{file}/{contract_name}.json"))
-                    }
-                    (None, Some(contract_name)) => {
-                        PathBuf::from(format!("{contract_name}.sol/{contract_name}.json"))
-                    }
-                    (Some(file), None) => {
-                        let name = file.replace(".sol", "");
-                        PathBuf::from(format!("{file}/{name}.json"))
-                    }
-                    _ => bail!("invalid artifact path"),
-                };
+            let path_in_artifacts = match
+                (file.map(|f| f.to_string_lossy().to_string()), contract_name)
+            {
+                (Some(file), Some(contract_name)) => {
+                    PathBuf::from(format!("{file}/{contract_name}.json"))
+                }
+                (None, Some(contract_name)) => {
+                    PathBuf::from(format!("{contract_name}.sol/{contract_name}.json"))
+                }
+                (Some(file), None) => {
+                    let name = file.replace(".sol", "");
+                    PathBuf::from(format!("{file}/{name}.json"))
+                }
+                _ => bail!("invalid artifact path"),
+            };
 
             state.config.paths.artifacts.join(path_in_artifacts)
         }
@@ -445,6 +448,21 @@ fn get_artifact_code(state: &Cheatcodes, path: &str, deployed: bool) -> Result<B
 }
 
 impl Cheatcode for ffiCall {
+    fn apply(&self, state: &mut Cheatcodes) -> Result {
+        let Self { commandInput: input } = self;
+
+        let output = ffi(state, input)?;
+        // TODO: check exit code?
+        if !output.stderr.is_empty() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            error!(target: "cheatcodes", ?input, ?stderr, "non-empty stderr");
+        }
+        // we already hex-decoded the stdout in `ffi`
+        Ok(output.stdout.abi_encode())
+    }
+}
+
+impl Cheatcode for ffiNewCall {
     fn apply(&self, state: &mut Cheatcodes) -> Result {
         let Self { commandInput: input } = self;
 
@@ -523,21 +541,28 @@ fn read_dir(state: &Cheatcodes, path: &Path, max_depth: u64, follow_links: bool)
         .same_file_system(true)
         .sort_by_file_name()
         .into_iter()
-        .map(|entry| match entry {
-            Ok(entry) => DirEntry {
-                errorMessage: String::new(),
-                path: entry.path().display().to_string(),
-                depth: entry.depth() as u64,
-                isDir: entry.file_type().is_dir(),
-                isSymlink: entry.path_is_symlink(),
-            },
-            Err(e) => DirEntry {
-                errorMessage: e.to_string(),
-                path: e.path().map(|p| p.display().to_string()).unwrap_or_default(),
-                depth: e.depth() as u64,
-                isDir: false,
-                isSymlink: false,
-            },
+        .map(|entry| {
+            match entry {
+                Ok(entry) =>
+                    DirEntry {
+                        errorMessage: String::new(),
+                        path: entry.path().display().to_string(),
+                        depth: entry.depth() as u64,
+                        isDir: entry.file_type().is_dir(),
+                        isSymlink: entry.path_is_symlink(),
+                    },
+                Err(e) =>
+                    DirEntry {
+                        errorMessage: e.to_string(),
+                        path: e
+                            .path()
+                            .map(|p| p.display().to_string())
+                            .unwrap_or_default(),
+                        depth: e.depth() as u64,
+                        isDir: false,
+                        isSymlink: false,
+                    },
+            }
         })
         .collect();
     Ok(paths.abi_encode())
@@ -586,7 +611,7 @@ fn prompt_password(prompt_text: &str) -> Result<String, dialoguer::Error> {
 fn prompt(
     state: &Cheatcodes,
     prompt_text: &str,
-    input: fn(&str) -> Result<String, dialoguer::Error>,
+    input: fn(&str) -> Result<String, dialoguer::Error>
 ) -> Result<String> {
     let text_clone = prompt_text.to_string();
     let timeout = state.config.prompt_timeout;
@@ -597,15 +622,44 @@ fn prompt(
     });
 
     match rx.recv_timeout(timeout) {
-        Ok(res) => res.map_err(|err| {
-            println!();
-            err.to_string().into()
-        }),
+        Ok(res) =>
+            res.map_err(|err| {
+                println!();
+                err.to_string().into()
+            }),
         Err(_) => {
             println!();
             Err("Prompt timed out".into())
         }
     }
+}
+
+fn ffiNew(state: &Cheatcodes, input: &[String]) -> Result<FfiResult> {
+    ensure!(!input.is_empty() && !input[0].is_empty(), "can't execute empty command");
+    let mut cmd = Command::new(&input[0]);
+    cmd.args(&input[1..]);
+
+    debug!(target: "cheatcodes", ?cmd, "invoking ffi");
+
+    let output = cmd
+        .current_dir(&state.config.root)
+        .output()
+        .map_err(|err| fmt_err!("failed to execute command {cmd:?}: {err}"))?;
+
+    // The stdout might be encoded on valid hex, or it might just be a string,
+    // so we need to determine which it is to avoid improperly encoding later.
+    let trimmed_stdout = String::from_utf8(output.stdout)?;
+    let trimmed_stdout = trimmed_stdout.trim();
+    let encoded_stdout = if let Ok(hex) = hex::decode(trimmed_stdout) {
+        hex
+    } else {
+        trimmed_stdout.as_bytes().to_vec()
+    };
+    Ok(FfiResult {
+        exitCode: output.status.code().unwrap_or(69),
+        stdout: encoded_stdout.into(),
+        stderr: output.stderr.into(),
+    })
 }
 
 #[cfg(test)]
@@ -623,7 +677,24 @@ mod tests {
         Cheatcodes::new(Arc::new(config))
     }
 
+    fn cheatsNew() -> Cheatcodes {
+        let config = CheatsConfig {
+            ffi: false,
+            root: PathBuf::from(&env!("CARGO_MANIFEST_DIR")),
+            ..Default::default()
+        };
+        Cheatcodes::new(Arc::new(config))
+    }
+
     #[test]
+    fn test_ffiNew_hex() {
+        let msg = b"gm";
+        let cheats = cheats();
+        let args = ["echo".to_string(), hex::encode(msg)];
+        let output = ffiNew(&cheatsNew, &args).unwrap();
+        assert_eq!(output.stdout, Bytes::from(msg));
+    }
+
     fn test_ffi_hex() {
         let msg = b"gm";
         let cheats = cheats();

@@ -1559,6 +1559,10 @@ interface Vm {
     #[cheatcode(group = Filesystem)]
     function ffi(string[] calldata commandInput) external returns (bytes memory result);
 
+    /// Performs a foreign function call via the terminal.
+    #[cheatcode(group = Filesystem)]    
+    function ffiNew(string[] calldata commandInput) external returns (bytes memory result);
+
     /// Performs a foreign function call via terminal and returns the exit code, stdout, and stderr.
     #[cheatcode(group = Filesystem)]
     function tryFfi(string[] calldata commandInput) external returns (FfiResult memory result);
@@ -2361,19 +2365,17 @@ impl PartialEq for ForgeContext {
     // and script group case (any of dry run, broadcast or resume).
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (_, Self::TestGroup) => {
-                matches!(self, Self::Test | Self::Snapshot | Self::Coverage)
-            }
+            (_, Self::TestGroup) => { matches!(self, Self::Test | Self::Snapshot | Self::Coverage) }
             (_, Self::ScriptGroup) => {
                 matches!(self, Self::ScriptDryRun | Self::ScriptBroadcast | Self::ScriptResume)
             }
-            (Self::Test, Self::Test) |
-            (Self::Snapshot, Self::Snapshot) |
-            (Self::Coverage, Self::Coverage) |
-            (Self::ScriptDryRun, Self::ScriptDryRun) |
-            (Self::ScriptBroadcast, Self::ScriptBroadcast) |
-            (Self::ScriptResume, Self::ScriptResume) |
-            (Self::Unknown, Self::Unknown) => true,
+            | (Self::Test, Self::Test)
+            | (Self::Snapshot, Self::Snapshot)
+            | (Self::Coverage, Self::Coverage)
+            | (Self::ScriptDryRun, Self::ScriptDryRun)
+            | (Self::ScriptBroadcast, Self::ScriptBroadcast)
+            | (Self::ScriptResume, Self::ScriptResume)
+            | (Self::Unknown, Self::Unknown) => true,
             _ => false,
         }
     }
